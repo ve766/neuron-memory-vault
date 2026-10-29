@@ -1,0 +1,1606 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>记忆穹窖 · Neuron Memory Vault</title>
+<style>
+:root{
+  --bg:#040404; --ink:#f4f4f4; --ink2:#a8a8a8; --dim:#6b6b6b; --faint:#2a2a2a;
+  --line:rgba(255,255,255,.16); --line2:rgba(255,255,255,.34);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace;
+  --sans:"Inter","Helvetica Neue","Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  --ease:cubic-bezier(.2,.7,.3,1);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;overflow:hidden;-webkit-font-smoothing:antialiased}
+#stage{position:fixed;inset:0;cursor:grab}
+#stage.grabbing{cursor:grabbing}
+#stage.hovering{cursor:pointer}
+#stage.injecting{cursor:cell}
+#vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 42%,transparent 55%,rgba(0,0,0,.55) 100%)}
+.panel{position:fixed;z-index:10}
+
+/* ── 标题 ── */
+#brand{top:20px;left:22px;pointer-events:none}
+#brand h1{margin:0;font-size:19px;font-weight:600;letter-spacing:.02em}
+#brand h1 em{font-style:normal;color:var(--dim);font-weight:400;font-family:var(--mono);font-size:11px;letter-spacing:.18em;margin-left:10px}
+#brand p{margin:5px 0 0;font-size:11px;color:var(--dim);letter-spacing:.04em}
+#liveBadge{display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:#000;background:#fff;padding:4px 9px;border-radius:2px}
+#liveBadge i{width:6px;height:6px;border-radius:50%;background:#000;animation:bpulse 2s infinite}
+#liveBadge[hidden]{display:none!important}
+@keyframes bpulse{0%,100%{opacity:1}50%{opacity:.25}}
+#metaPanel{position:fixed;z-index:70;left:22px;top:120px;width:min(380px,calc(100vw - 44px));max-height:min(70vh,620px);overflow:auto;background:rgba(6,6,6,.94);border:1px solid var(--line2);padding:16px 16px 18px}
+#metaPanel h3{margin:0 0 4px;font-size:13px;font-weight:600}
+#metaPanel .m-sub{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;color:var(--dim);margin:0 0 12px}
+#metaPanel .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--faint);border:1px solid var(--faint);margin:0 0 12px}
+#metaPanel .mcell{background:#080808;padding:7px 9px}
+#metaPanel dt{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--dim)}
+#metaPanel dd{margin:2px 0 0;font-family:var(--mono);font-size:14px}
+#metaPanel h4{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--dim);font-weight:400;margin:14px 0 6px}
+#metaPanel ol{list-style:none;margin:0;padding:0;font-family:var(--mono);font-size:10px}
+#metaPanel ol li{display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--faint);color:var(--ink2)}
+#metaPanel ol li span:first-child{color:var(--dim);min-width:54px}
+#metaPanel .m-note{margin:12px 0 0;font-size:11px;line-height:1.7;color:var(--dim)}
+
+/* ── 右上控制 ── */
+#console{top:18px;right:20px;display:flex;flex-direction:column;gap:10px;align-items:flex-end;max-width:min(460px,calc(100vw - 40px))}
+.tools{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.tools .sep{width:1px;background:var(--faint);margin:2px 2px}
+.search{display:flex;align-items:center;gap:8px;height:38px;padding:0 4px 0 12px;border:1px solid var(--line2);background:rgba(4,4,4,.72);backdrop-filter:blur(8px);border-radius:2px}
+.search input{border:0;background:none;outline:0;color:var(--ink);font:inherit;font-size:13px;width:210px}
+.search input::placeholder{color:var(--dim)}
+.search:focus-within{border-color:rgba(255,255,255,.7)}
+.search kbd{font-family:var(--mono);font-size:10px;color:var(--dim);border:1px solid var(--faint);border-radius:3px;padding:2px 5px}
+.chips{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+#budgetWrap{display:flex;align-items:center;gap:10px;min-height:20px;font-family:var(--mono);font-size:10.5px;color:var(--ink2);letter-spacing:.06em}
+#budgetBar{width:150px;height:3px;background:var(--faint);position:relative;overflow:hidden}
+#budgetFill{position:absolute;inset:0;right:auto;width:0;background:#fff;transition:width .8s var(--ease)}
+
+/* ── 按钮系统 ── */
+.btn{
+  font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--ink);
+  background:transparent;border:1px solid var(--line2);border-radius:2px;
+  padding:8px 14px;cursor:pointer;position:relative;white-space:nowrap;
+  transition:background .14s var(--ease),color .14s var(--ease),transform .14s var(--ease),border-color .14s var(--ease);
+}
+.btn:hover{background:#fff;color:#000;border-color:#fff;transform:translateY(-1px)}
+.btn:active{transform:translateY(0) scale(.97)}
+.btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.btn[disabled]{opacity:.32;cursor:default;pointer-events:none}
+.btn[aria-pressed="true"]{background:#fff;color:#000;border-color:#fff}
+.btn[aria-pressed="true"]:hover{background:#d8d8d8;border-color:#d8d8d8}
+.btn.primary{background:#fff;color:#000;border-color:#fff}
+.btn.primary:hover{background:#d8d8d8;border-color:#d8d8d8}
+.btn.dashed{border-style:dashed}
+.btn.icon{width:34px;height:34px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-size:14px}
+.btn.small{padding:5px 10px;font-size:11px}
+.chip{
+  font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--ink2);
+  border:1px solid var(--line);border-radius:999px;padding:4px 11px;background:rgba(4,4,4,.6);cursor:pointer;
+  transition:all .14s var(--ease);
+}
+.chip:hover{color:var(--ink);border-color:var(--line2)}
+.chip[aria-pressed="true"]{background:#fff;color:#000;border-color:#fff}
+
+/* ── 详情抽屉 ── */
+#detail{
+  top:0;right:0;bottom:0;width:340px;background:rgba(6,6,6,.92);backdrop-filter:blur(14px);
+  border-left:1px solid var(--line);padding:22px 20px 26px;overflow-y:auto;
+  transform:translateX(105%);transition:transform .34s var(--ease);
+}
+#detail.open{transform:translateX(0)}
+#detail .d-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+#detail .d-no{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--dim)}
+#detail h2{margin:2px 0 4px;font-size:17px;font-weight:600;letter-spacing:.01em}
+#detail .d-topic{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink2);margin:0 0 14px}
+#detail .d-text{font-size:13.5px;line-height:1.75;color:var(--ink);border-left:2px solid #fff;padding-left:12px;margin:0 0 16px}
+#detail dl{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--faint);border:1px solid var(--faint);margin:0 0 16px}
+#detail .cell{background:#080808;padding:8px 10px}
+#detail dt{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--dim)}
+#detail dd{margin:3px 0 0;font-family:var(--mono);font-size:13px;color:var(--ink)}
+#detail h3{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;color:var(--dim);font-weight:400;margin:18px 0 8px}
+#detail ol.rev{list-style:none;margin:0;padding:0}
+#detail ol.rev li{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--faint);font-size:12px}
+#detail ol.rev li:last-child{border-bottom:0}
+#detail .rv-v{font-family:var(--mono);color:var(--ink);min-width:26px}
+#detail .rv-t{color:var(--ink2);flex:1}
+#detail .rv-d{font-family:var(--mono);font-size:10px;color:var(--dim)}
+#detail .d-actions{display:flex;gap:8px;margin-top:20px;flex-wrap:wrap}
+#detail .d-note{margin:14px 0 0;font-size:11px;color:var(--dim);line-height:1.7}
+
+/* ── 图例 / 统计 ── */
+#legend{left:22px;bottom:20px;max-width:360px}
+#legend .lg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px;color:var(--ink2)}
+#legend .lg span{display:inline-flex;align-items:center;gap:7px}
+#legend i{width:9px;height:9px;border-radius:50%;background:#fff;display:inline-block}
+#legend i.hub{background:none;border:1px solid #fff;border-radius:2px;transform:rotate(45deg);width:7px;height:7px}
+#legend i.ash{background:#3d3d3d}
+#legend i.inh{background:#0b0b0b;border:1.5px solid #fff}
+#legend i.dash{background:none;border:1px dashed #fff;border-radius:50%;width:11px;height:11px}
+#legend i.pulse{background:radial-gradient(circle,#fff 30%,transparent 70%)}
+#stats{margin-top:9px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--dim)}
+#minimap{position:fixed;right:20px;bottom:44px;width:150px;height:150px;border:1px solid var(--line);background:rgba(4,4,4,.78);z-index:9}
+#fallback{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;text-align:center;padding:24px;z-index:60;background:#040404}
+#fallback[hidden]{display:none!important}
+#legend details{margin-top:8px;font-size:11px;color:var(--dim)}
+#legend summary{cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.1em;outline:none}
+#legend summary:hover{color:var(--ink)}
+#legend details p{margin:6px 0 0;line-height:1.7;font-size:11px}
+#legend details code{font-family:var(--mono);font-size:10px;color:var(--ink2)}
+
+/* ── 提示 ── */
+#hint{right:20px;bottom:18px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--dim);pointer-events:none}
+#tooltip{position:fixed;z-index:30;pointer-events:none;background:rgba(4,4,4,.92);border:1px solid var(--line2);padding:8px 11px;font-size:11.5px;max-width:250px;opacity:0;transition:opacity .12s}
+#tooltip .tt-no{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--dim)}
+#tooltip .tt-tx{margin:3px 0 0;line-height:1.55}
+#tooltip .tt-v{margin-top:7px;height:3px;background:var(--faint);position:relative;overflow:hidden}
+#tooltip .tt-v i{position:absolute;left:0;top:0;bottom:0;width:0;background:#fff}
+#tooltip .tt-st{margin-top:4px;font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--dim)}
+#toast{position:fixed;left:50%;bottom:64px;transform:translate(-50%,16px);z-index:40;background:#fff;color:#000;font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;padding:9px 16px;border-radius:2px;opacity:0;transition:all .3s var(--ease);pointer-events:none}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ── 响应 ── */
+@media (max-width:720px){
+  #brand{top:14px;left:14px}
+  #brand h1{font-size:16px}
+  #console{top:12px;right:12px;left:12px;align-items:stretch;max-width:none}
+  .search input{width:100%;flex:1}
+  .search{width:100%}
+  .tools{justify-content:flex-start}
+  #detail{width:min(340px,100vw)}
+  #legend{left:14px;bottom:14px;max-width:calc(100vw - 28px)}
+  #hint{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .btn,.chip,#detail{transition:none}
+}
+</style>
+</head>
+<body>
+
+<div id="stage" aria-label="记忆穹窖三维视图"></div>
+<div id="fallback" hidden>
+  <p style="font-family:ui-monospace,monospace;font-size:12px;letter-spacing:.18em;color:#8a8a8a;margin:0">WEBGL UNAVAILABLE</p>
+  <h2 style="margin:0;font-size:20px;font-weight:600">当前环境无法创建 WebGL 上下文</h2>
+  <p style="margin:0;max-width:44ch;font-size:13px;line-height:1.7;color:#a8a8a8">请用 Chrome / Edge / Firefox 直接双击打开本文件；若浏览器禁用了硬件加速，请在设置中开启后重试。本页无需联网、无任何外部依赖。</p>
+</div>
+<div id="vignette"></div>
+
+<header class="panel" id="brand">
+  <h1>记忆穹窖<em>NEURON MEMORY VAULT</em></h1>
+  <p>仿生神经元记忆仓库 · 把任意记忆集合变成一座可探索的三维组织</p>
+  <div id="liveBadge" hidden><i></i><span>快照接入 · SNAPSHOT</span></div>
+</header>
+
+<section class="panel" id="console" aria-label="控制台">
+  <form class="search" id="searchForm">
+    <input id="q" type="search" placeholder="检索记忆…（词项命中 + 置信度 + 新近度）" autocomplete="off" aria-label="检索记忆">
+    <button type="submit" class="btn primary small">检索</button>
+    <kbd>/</kbd>
+  </form>
+  <div class="chips" role="group" aria-label="筛选">
+    <button type="button" class="chip" data-f="all" aria-pressed="true">全部</button>
+    <button type="button" class="chip" data-f="active" aria-pressed="false">有效</button>
+    <button type="button" class="chip" data-f="retracted" aria-pressed="false">已撤销</button>
+    <button type="button" class="chip" data-f="stale" aria-pressed="false">逾期未确认</button>
+    <button type="button" class="chip" data-f="sensitive" aria-pressed="false">敏感</button>
+    <button type="button" class="chip" data-f="inferred" aria-pressed="false">模型推断</button>
+  </div>
+  <div class="tools">
+    <button type="button" class="btn small" id="modeExc" aria-pressed="true" title="按住神经元注入去极化电流">刺激</button>
+    <button type="button" class="btn small" id="modeInh" aria-pressed="false" title="按住神经元注入超极化电流">抑制</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" class="btn small" id="growOne" title="从兴趣中枢生长一条新记忆">生长一条</button>
+    <button type="button" class="btn small" id="grow100" title="压力测试：批量生长 100 条">+100 压力</button>
+    <button type="button" class="btn small" id="flyNew" title="镜头飞向最新长出的记忆">飞向最新</button>
+    <button type="button" class="btn small" id="approveSensitive" aria-pressed="false" title="本次批准敏感级记忆进入显示与装载">含敏感</button>
+    <button type="button" class="btn small" id="metaBtn" hidden>快照元数据</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" class="btn" id="assemble">预演检索装载</button>
+    <button type="button" class="btn" id="tour">漫游</button>
+    <button type="button" class="btn icon" id="reset" title="重置视角" aria-label="重置视角">⟲</button>
+  </div>
+  <div id="budgetWrap"><span id="budgetText">装配预算待命</span><span id="budgetBar"><i id="budgetFill"></i></span></div>
+</section>
+
+<aside class="panel" id="detail" aria-label="记忆详情" hidden>
+  <div class="d-head"><span class="d-no" id="dNo">—</span><button type="button" class="btn icon small" id="dClose" aria-label="关闭详情">✕</button></div>
+  <h2 id="dTopicName">—</h2>
+  <p class="d-topic" id="dSub">—</p>
+  <p class="d-text" id="dText">—</p>
+  <dl id="dGrid"></dl>
+  <h3>修订谱系（REVISION CHAIN）</h3>
+  <ol class="rev" id="dRev"></ol>
+  <div class="d-actions" id="dActions"></div>
+  <p class="d-note">此面板为原型演示：操作只改变本页演示状态，不写入任何真实数据库。真实字段与转移语义遵循 memory-service（created / corrected / retracted / restored / confirmed）。</p>
+</aside>
+
+<footer class="panel" id="legend">
+  <div class="lg">
+    <span><i></i>用户明确输入</span>
+    <span><i class="inh"></i>抑制性（已撤销）</span>
+    <span><i class="hub"></i>兴趣中枢</span>
+    <span><i class="dash"></i>敏感·需逐次批准</span>
+    <span><i class="ash"></i>灰烬化</span>
+    <span><i class="pulse"></i>动作电位</span>
+  </div>
+  <p id="stats">—</p>
+  <details>
+    <summary>生理映射说明</summary>
+    <p>每个神经元是一套膜动力学：悬停＝探针去极化，<b>按住＝注入电流</b>，膜电位攒到阈值就<b>全或无发放</b>——动作电位经轴丘沿髓鞘轴突跳行至终末扣，囊泡越过突触间隙打在<b>树突棘</b>上，足够多的输入会让它也发放，形成级联。发放后进入<b>不应期</b>并累积<b>疲劳</b>（线粒体加速工作）；两个连着的神经元几乎同时发放＝赫布学习，突触变亮。已撤销的记忆是<b>抑制性</b>的：它们放电时压制相关激活——撤销不是消失，是抑制。刺激/抑制按钮切换注入电流的极性。「预演检索装载」按 <code>rank = 词法分 + confidence/50 + 2·0.5^(天/30)</code> 重演 assembleContext 的 3000 字符预算。</p>
+  </details>
+</footer>
+
+<p class="panel" id="hint">拖拽旋转 · Shift/中键拖拽平移 · 滚轮缩放 · 按住注入电流 · 点击选入</p>
+<canvas id="minimap" width="300" height="300" aria-label="记忆分布迷你地图"></canvas>
+
+<aside id="metaPanel" hidden aria-label="快照元数据">
+  <h3>数据源 · 快照</h3>
+  <p class="m-sub" id="metaSub">SNAPSHOT</p>
+  <dl class="mgrid" id="metaGrid"></dl>
+  <h4>最近事件（event_journal）</h4>
+  <ol id="metaEvents"></ol>
+  <p class="m-note" id="metaNote"></p>
+</aside>
+<div id="tooltip" aria-hidden="true"></div>
+<div id="toast" aria-hidden="true"></div>
+
+<script>
+/*__THREE_JS__*/
+</script>
+<script>/*__SNAPSHOT__*/</script>
+<script>
+(function () {
+"use strict";
+
+/* ══════════ 演示数据：通用记忆快照字段 ══════════ */
+var TOPICS = [
+  { id: "astro",  label: "天文" },
+  { id: "coffee", label: "咖啡" },
+  { id: "photo",  label: "摄影" },
+  { id: "run",    label: "跑步" },
+  { id: "jazz",   label: "爵士乐" }
+];
+var MEM = [
+  { id:"mem-01", t:"我对天文学着迷，最想弄懂土星环的结构与成因", topic:"astro", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:64, fd:3 },
+  { id:"mem-02", t:"天文学的进展真快，尤其是系外行星探测", topic:"astro", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:58, fd:3 },
+  { id:"mem-03", t:"想入一台天文望远镜，预算先控制在三千以内", topic:"astro", src:"inferred", conf:70, status:"active", sens:"personal", changes:["created","confirmed"], cd:40, fd:9 },
+  { id:"mem-04", t:"记错了：喜欢的不是猎户座，是冬季的天狼星", topic:"astro", src:"user", conf:90, status:"active", sens:"normal", changes:["created","corrected"], cd:36, fd:8 },
+  { id:"mem-05", t:"去年秋天第一次去郊外观星，那天看到银河了", topic:"astro", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:210, fd:200 },
+  { id:"mem-06", t:"土星环主要由冰粒构成，这件事我查证过", topic:"astro", src:"turn", conf:60, status:"active", sens:"normal", changes:["created","confirmed"], cd:30, fd:6 },
+  { id:"mem-07", t:"计划每周读一篇天文科普，先从《天空与望远镜》开始", topic:"astro", src:"inferred", conf:70, status:"retracted", sens:"normal", changes:["created","confirmed","retracted"], cd:33, fd:21 },
+  { id:"mem-08", t:"我住在城东，光污染重，观星要去西边山区", topic:"astro", src:"user", conf:85, status:"active", sens:"sensitive", changes:["created"], cd:28, fd:12 },
+
+  { id:"mem-09", t:"早上只喝手冲咖啡，浅烘，偏好埃塞俄比亚豆", topic:"coffee", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:90, fd:2 },
+  { id:"mem-10", t:"咖啡因耐受低，下午两点以后不碰咖啡", topic:"coffee", src:"user", conf:85, status:"active", sens:"personal", changes:["created"], cd:88, fd:5 },
+  { id:"mem-11", t:"家里那套 V60 滤杯是朋友送的生日礼物", topic:"coffee", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:80, fd:30 },
+  { id:"mem-12", t:"想学杯测，报了周末的感官训练课", topic:"coffee", src:"inferred", conf:70, status:"active", sens:"normal", changes:["created","confirmed"], cd:20, fd:4 },
+  { id:"mem-13", t:"已更正：以前爱喝深烘，现在彻底改浅烘了", topic:"coffee", src:"user", conf:95, status:"active", sens:"normal", changes:["created","corrected"], cd:70, fd:2 },
+  { id:"mem-14", t:"办公室咖啡机难喝，只当提神工具", topic:"coffee", src:"user", conf:85, status:"retracted", sens:"normal", changes:["created","retracted"], cd:60, fd:15 },
+
+  { id:"mem-15", t:"拍照偏黑白街拍，镜头只带 35mm 定焦", topic:"photo", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:120, fd:7 },
+  { id:"mem-16", t:"想拍一组观星人的纪实肖像，和天文那条计划呼应", topic:"photo", src:"inferred", conf:70, status:"active", sens:"normal", changes:["created","confirmed"], cd:22, fd:6 },
+  { id:"mem-17", t:"相机是二手的，快门数大概两万，足够用", topic:"photo", src:"user", conf:85, status:"active", sens:"personal", changes:["created"], cd:110, fd:40 },
+  { id:"mem-18", t:"修图只用灰度曲线，不喜欢重锐化", topic:"photo", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:100, fd:11 },
+  { id:"mem-19", t:"曾把一组街头照片投稿比赛，落选了但不打算停", topic:"photo", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:95, fd:95 },
+
+  { id:"mem-20", t:"每周二四六晨跑五公里，配速六分半", topic:"run", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:150, fd:1 },
+  { id:"mem-21", t:"膝盖旧伤，跑前必须做十分钟热身", topic:"run", src:"user", conf:85, status:"active", sens:"sensitive", changes:["created"], cd:140, fd:20 },
+  { id:"mem-22", t:"报名了半年后的城市半马，先按计划堆跑量", topic:"run", src:"inferred", conf:70, status:"active", sens:"normal", changes:["created","confirmed"], cd:45, fd:2 },
+  { id:"mem-23", t:"跑步时听爵士乐，节奏稳的那种", topic:"run", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:130, fd:3 },
+  { id:"mem-24", t:"旧跑鞋退役了，鞋底磨穿的位置在右脚外侧", topic:"run", src:"turn", conf:60, status:"active", sens:"normal", changes:["created","confirmed"], cd:35, fd:8 },
+
+  { id:"mem-25", t:"最爱的爵士专辑是 Kind of Blue，循环了很多年", topic:"jazz", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:200, fd:14 },
+  { id:"mem-26", t:"想去一次本地的爵士酒吧 livehouse", topic:"jazz", src:"inferred", conf:70, status:"active", sens:"normal", changes:["created","confirmed"], cd:25, fd:25 },
+  { id:"mem-27", t:"学过半年小号，后来搁置了，乐器还在", topic:"jazz", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:190, fd:170 },
+  { id:"mem-28", t:"听爵士时不喜欢别人说话，这是少数执念", topic:"jazz", src:"user", conf:85, status:"active", sens:"personal", changes:["created"], cd:160, fd:16 },
+  { id:"mem-29", t:"旧备忘：爵士与咖啡、夜跑的气质相通，写进随笔过", topic:"jazz", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:125, fd:60 },
+  { id:"mem-30", t:"Kind of Blue 的黑胶一直没买到首版，随缘", topic:"jazz", src:"user", conf:85, status:"active", sens:"normal", changes:["created"], cd:55, fd:9 },
+  { id:"mem-31", t:"失眠的夜里靠低音萨克斯特朗撑过去", topic:"jazz", src:"user", conf:85, status:"active", sens:"sensitive", changes:["created"], cd:48, fd:13 }
+];
+MEM.forEach(function (m) {
+  var age = (m.fd != null ? m.fd : m.cd);
+  m.stale = m.status === "active" && age > 180;
+});
+
+/* ══════════ 工具 ══════════ */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+var rng = mulberry32(20261026);
+function clamp(v,a,b){return v<a?a:v>b?b:v}
+function lerp(a,b,t){return a+(b-a)*t}
+function el(id){return document.getElementById(id)}
+function toast(msg){var t=el("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(function(){t.classList.remove("show")},1900)}
+function daysText(d){return d<=0?"刚刚":d+" 天前"}
+
+var STOP = new Set(["的","了","是","我","有","和","与","不","在","这","那","就","都","也","人","要","会","可以","一个","我们","你们","他们","自己","还是","但是","因为","所以","the","and","for","with"]);
+function terms(text){
+  var out=[], lat=text.toLowerCase().match(/[a-z0-9]+/g)||[], cjk=text.match(/[\u4e00-\u9fff]+/g)||[];
+  lat.forEach(function(w){ if(!STOP.has(w)&&w.length>1) out.push(w) });
+  cjk.forEach(function(seg){ for(var i=0;i+1<seg.length;i++){var b=seg.substr(i,2); if(!(STOP.has(seg[i])||STOP.has(seg[i+1]))) out.push(b);} });
+  return out.slice(0,16);
+}
+var MODE = (typeof window !== "undefined" && window.MEMORY_SNAPSHOT) ? "live" : "demo";
+var SNAP = MODE === "live" ? window.MEMORY_SNAPSHOT : null;
+if (MODE === "live") {
+  TOPICS = SNAP.interests.map(function (it) {
+    return { id: it.id.replace(/^int-/, ""), label: it.label, ev: it.evidence_count, conv: it.conversation_count, status: it.status };
+  });
+  MEM = SNAP.memories.map(function (x) {
+    return { id: x.id, t: x.text, text: x.text, topic: x.topic,
+      src: x.source_category === "user_explicit_input" ? "user" : (x.source_category === "model_inferred_confirmed" ? "inferred" : "turn"),
+      conf: x.confidence, status: x.status,
+      sens: x.sensitivity === "normal" ? "normal" : (x.sensitivity === "personal" ? "personal" : "sensitive"),
+      changes: x.changes.slice(), cd: x.created_days_ago, fd: x.confirmed_days_ago };
+  });
+  MEM.forEach(function (m) { m.stale = m.status === "active" && (m.fd != null ? m.fd : m.cd) > 180; });
+}
+MEM.forEach(function(m){ m.text = m.text || m.t; m.terms = terms(m.text) });
+var sensitiveApproved = false;
+function displayText(m){
+  return m.sens === "sensitive" && !sensitiveApproved ? "▮▮▮▮▮▮（敏感级 · 需本次批准后显示）" : m.text;
+}
+
+function rankOf(m, q){
+  var lex=0;
+  if(q){
+    var nq=q.toLowerCase();
+    if(m.text.toLowerCase().indexOf(nq)!==-1) lex+=4;
+    var qs=terms(q);
+    qs.forEach(function(t){ if(m.terms.indexOf(t)!==-1) lex+=1 });
+  }
+  var fd=(m.fd!=null?m.fd:m.cd);
+  return { m:m, rank: lex + m.conf/50 + 2*Math.pow(0.5, fd/30) };
+}
+
+/* ══════════ 场景 ══════════ */
+var stage = el("stage");
+var renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:"high-performance" });
+} catch (err) {
+  el("fallback").hidden = false;
+  return;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x040404, 1);
+stage.appendChild(renderer.domElement);
+
+var scene = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(52, window.innerWidth/window.innerHeight, 0.1, 4000);
+var camTarget = new THREE.Vector3(0,0,0);
+var orbit = { theta:0.6, phi:1.22, radius:TOPICS.length>6?70:17.5 };
+var BASE_R = TOPICS.length>6?70:17.5;
+function applyCamera(){
+  var sp=Math.sin(orbit.phi), cp=Math.cos(orbit.phi);
+  camera.position.set(
+    camTarget.x + orbit.radius*sp*Math.sin(orbit.theta),
+    camTarget.y + orbit.radius*cp,
+    camTarget.z + orbit.radius*sp*Math.cos(orbit.theta));
+  camera.lookAt(camTarget);
+}
+var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function glowTexture(){
+  var c=document.createElement("canvas");c.width=c.height=128;var x=c.getContext("2d");
+  var g=x.createRadialGradient(64,64,0,64,64,64);
+  g.addColorStop(0,"rgba(255,255,255,1)");g.addColorStop(.35,"rgba(255,255,255,.45)");g.addColorStop(1,"rgba(255,255,255,0)");
+  x.fillStyle=g;x.fillRect(0,0,128,128);return new THREE.CanvasTexture(c);
+}
+function ringTexture(){
+  var c=document.createElement("canvas");c.width=c.height=128;var x=c.getContext("2d");
+  x.strokeStyle="rgba(255,255,255,1)";x.lineWidth=5;x.beginPath();x.arc(64,64,52,0,Math.PI*2);x.stroke();
+  return new THREE.CanvasTexture(c);
+}
+function labelTexture(text){
+  var c=document.createElement("canvas");c.width=256;c.height=64;var x=c.getContext("2d");
+  x.font="600 30px 'IBM Plex Mono',monospace";x.fillStyle="rgba(255,255,255,.92)";x.textAlign="center";x.textBaseline="middle";
+  x.fillText(text,128,34);
+  var t=new THREE.CanvasTexture(c);t.minFilter=THREE.LinearFilter;return t;
+}
+var TEX_GLOW=glowTexture(), TEX_RING=ringTexture();
+
+/* 穹窖笼 */
+(function cage(){
+  var geo=new THREE.IcosahedronBufferGeometry(TOPICS.length>6?54:11.5,1);
+  var wire=new THREE.WireframeGeometry(geo);
+  var mat=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:TOPICS.length>6?0.022:0.032});
+  var cage=new THREE.LineSegments(wire,mat);scene.add(cage);
+  cage.rotation.z=0.2;
+  window.__cage=cage;
+})();
+
+/* 尘埃 */
+(function dust(){
+  var N=340,pos=new Float32Array(N*3);
+  for(var i=0;i<N;i++){
+    var r=13+rng()*22, th=rng()*Math.PI*2, ph=Math.acos(2*rng()-1);
+    pos[i*3]=r*Math.sin(ph)*Math.cos(th);pos[i*3+1]=r*Math.cos(ph)*0.7;pos[i*3+2]=r*Math.sin(ph)*Math.sin(th);
+  }
+  var g=new THREE.BufferGeometry();g.addAttribute("position",new THREE.BufferAttribute(pos,3));
+  var m=new THREE.PointsMaterial({size:0.05,color:0x888888,transparent:true,opacity:0.5,sizeAttenuation:true,depthWrite:false});
+  scene.add(new THREE.Points(g,m));
+})();
+
+/* 兴趣中枢：按神经核团的散点分布（不再是环形） */
+var hubGroup=new THREE.Group();scene.add(hubGroup);
+var hubs={};
+var LR=mulberry32(424242);
+function scatteredCenters(n,span,minD){
+  var out=[];
+  for(var t=0;t<n*900&&out.length<n;t++){
+    var p=new THREE.Vector3(LR()-0.5,LR()-0.5,LR()-0.5).normalize().multiplyScalar(span*Math.pow(LR(),0.55));
+    p.y*=0.55;
+    var ok=true;
+    for(var i=0;i<out.length;i++){if(out[i].distanceTo(p)<minD){ok=false;break}}
+    if(ok)out.push(p);
+  }
+  return out;
+}
+var CENTERS=scatteredCenters(TOPICS.length,TOPICS.length>6?34:6.0,TOPICS.length>6?12.5:4.4);
+TOPICS.forEach(function(tp,i){
+  var pos=(CENTERS[i]||new THREE.Vector3(0,0,0)).clone();
+  var mesh=new THREE.Mesh(new THREE.OctahedronBufferGeometry(0.3,0),new THREE.MeshBasicMaterial({color:0xffffff,wireframe:true,transparent:true,opacity:0.42}));
+  mesh.position.copy(pos);hubGroup.add(mesh);
+  var halo=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX_GLOW,color:0xffffff,transparent:true,opacity:0.1,blending:THREE.AdditiveBlending,depthWrite:false}));
+  halo.scale.set(TOPICS.length>6?2.2:1.5,TOPICS.length>6?2.2:1.5,1);halo.position.copy(pos);hubGroup.add(halo);
+  var label=new THREE.Sprite(new THREE.SpriteMaterial({map:labelTexture(tp.label),transparent:true,opacity:0.8,depthWrite:false}));
+  var wide=TOPICS.length>6;
+  label.scale.set(wide?5.2:2.2,wide?1.3:0.56,1);
+  label.position.copy(pos).add(new THREE.Vector3(0,wide?2.2:0.9,0));hubGroup.add(label);
+  hubs[tp.id]={mesh:mesh,halo:halo,label:label,pos:pos.clone(),tp:tp,flash:0,
+    axis:new THREE.Vector3(LR()-0.5,LR()-0.35,LR()-0.5).normalize(),
+    stretch:1.15+LR()*0.5,squash:0.72+LR()*0.26};
+});
+
+/* 组织学式布局：高斯散布 + 各向异性 + 空隙（脑室样） + 最小间距松弛 */
+var VOIDS=[];
+if(TOPICS.length>6){
+  for(var vv=0;vv<2;vv++){
+    VOIDS.push({c:new THREE.Vector3(LR()-0.5,LR()*0.5,LR()-0.5).normalize().multiplyScalar(10+LR()*18),r:7+LR()*7});
+  }
+}
+var LAYOUT=[];
+(function(){
+  var byTopic={};
+  MEM.forEach(function(m){(byTopic[m.topic]=byTopic[m.topic]||[]).push(m)});
+  var tmp=[];
+  var byTopic2={};
+  MEM.forEach(function(m){(byTopic2[m.topic]=byTopic2[m.topic]||[]).push(m)});
+  /* 每区 1–3 个亚核（密核），密核之间是稀疏带；少量孤立细胞散在区间 */
+  var SUBCORE={};
+  Object.keys(byTopic2).forEach(function(tp){
+    var h=hubs[tp],n=byTopic2[tp].length;
+    var smallQ=n<50;
+    var k=smallQ?(1+Math.floor(LR()*2)):(1+Math.floor(LR()*3));
+    var cores=[];
+    for(var c=0;c<k;c++){
+      var off=new THREE.Vector3(LR()-0.5,LR()-0.5,LR()-0.5).normalize().multiplyScalar((1.2+LR()*5.2)*(smallQ?0.55:1));
+      cores.push(h.pos.clone().add(off));
+    }
+    SUBCORE[tp]={cores:cores,sigma:smallQ?(2.7+LR()*1.8):(1.5+LR()*1.4)};
+  });
+  MEM.forEach(function(m){
+    var h=hubs[m.topic],sc=SUBCORE[m.topic];
+    var p;
+    if(LR()<(MEM.length<50?0.12:0.06)){
+      /* 孤立神经元：落在组织边缘或区间空隙 */
+      var dir=new THREE.Vector3(LR()-0.5,LR()*0.4,LR()-0.5).normalize();
+      p=h.pos.clone().addScaledVector(dir,8+LR()*20);
+    }else{
+      var core=sc.cores[Math.floor(LR()*sc.cores.length)];
+      var g=new THREE.Vector3((LR()+LR()+LR()-1.5)/1.5,(LR()+LR()+LR()-1.5)/1.5,(LR()+LR()+LR()-1.5)/1.5).multiplyScalar(sc.sigma);
+      var along=g.dot(h.axis);
+      g.addScaledVector(h.axis,along*(h.stretch-1));
+      var perp=g.clone().addScaledVector(h.axis,-g.dot(h.axis));
+      g.addScaledVector(perp,(h.squash-1));
+      p=core.clone().add(g);
+      p.y*=0.86;
+    }
+    VOIDS.forEach(function(v){
+      var d=p.clone().sub(v.c),len=d.length();
+      if(len<v.r)p.copy(v.c).add(d.normalize().multiplyScalar(v.r));
+    });
+    tmp.push({m:m,p:p});
+  });
+  for(var it=0;it<10;it++){
+    for(var a=0;a<tmp.length;a++)for(var b=a+1;b<tmp.length;b++){
+      var d=tmp[a].p.distanceTo(tmp[b].p);
+      if(d<1.7&&d>0.001){
+        var push=tmp[a].p.clone().sub(tmp[b].p).normalize().multiplyScalar((1.7-d)*0.5);
+        tmp[a].p.add(push);tmp[b].p.sub(push);
+      }
+    }
+  }
+  LAYOUT=tmp.map(function(o){return o.p});
+})();
+
+/* ══════════ 仿生神经元工厂 ══════════
+   胞体：噪声变形球 + 菲涅尔膜（ShaderMaterial）
+   核仁：高亮小球 + 光晕 sprite（膜电位充电指示）
+   树突：两级分形树（vertexColors 越深越暗）
+   轴突：主输出方向 + 终末扣结 ×2 */
+var R=mulberry32(778899);
+var nodeGroup=new THREE.Group();scene.add(nodeGroup);
+var pickables=[];
+var nodeList=[];
+var nodes={};
+
+var somaVert = [
+  "varying vec3 vN; varying vec3 vV;",
+  "void main(){",
+  "  vec4 mv = modelViewMatrix * vec4(position,1.0);",
+  "  vN = normalize(normalMatrix * normal);",
+  "  vV = normalize(-mv.xyz);",
+  "  gl_Position = projectionMatrix * mv;",
+  "}"].join("\n");
+var somaFrag = [
+  "uniform float uFire; uniform float uDim; uniform float uInhib; uniform float uCharge;",
+  "varying vec3 vN; varying vec3 vV;",
+  "void main(){",
+  "  float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0);",
+  "  vec3 core = uInhib > 0.5 ? vec3(0.03) : vec3(0.34);",
+  "  float k = clamp(rim*1.25 + uFire*0.75 + uCharge*0.28, 0.0, 1.0);",
+  "  vec3 c = mix(core, vec3(1.0), k);",
+  "  float a = mix(0.10, 0.92, rim);",
+  "  gl_FragColor = vec4(c, a * (0.35 + 0.65*uDim) * (0.9 + uFire*0.1));",
+  "}"].join("\n");
+
+function deformedSoma(seed){
+  var g = new THREE.IcosahedronBufferGeometry(1, 2);
+  var p = g.attributes.position;
+  var v = new THREE.Vector3();
+  for(var i=0;i<p.count;i++){
+    v.set(p.getX(i),p.getY(i),p.getZ(i));
+    var n = v.clone().normalize();
+    var w = 1 + 0.07*Math.sin(n.x*3.1+seed) * Math.sin(n.y*2.7+seed*1.3) + 0.05*Math.sin(n.z*4.3+seed*0.7);
+    v.multiplyScalar(w);
+    p.setXYZ(i,v.x,v.y,v.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function dendriteTree(rng){
+  var pts=[], cols=[], spines=[];
+  function grow(origin, dir, len, depth){
+    var end = origin.clone().addScaledVector(dir, len);
+    var mid = origin.clone().addScaledVector(dir, len*0.5)
+      .add(new THREE.Vector3(rng()-0.5,rng()-0.5,rng()-0.5).multiplyScalar(len*0.24));
+    pts.push(origin.clone(), mid, mid.clone(), end.clone());
+    var c = depth===0?0.5:(depth===1?0.3:0.18);
+    cols.push(c,c,c, c,c,c, c,c,c, c,c,c);
+    if(depth>=2) spines.push(end.clone());
+    if(depth<2){
+      var n = depth===0?2+Math.floor(rng()*2):2;
+      for(var i=0;i<n;i++){
+        grow(end, dir.clone().add(new THREE.Vector3(rng()-0.5,rng()-0.5,rng()-0.5).multiplyScalar(1.1)).normalize(), len*0.6, depth+1);
+      }
+    }
+  }
+  var baseN = 3+Math.floor(rng()*2);
+  for(var b=0;b<baseN;b++){
+    var a = b/baseN*Math.PI*2 + rng()*0.8;
+    var dir = new THREE.Vector3(Math.cos(a), 0.5+rng()*0.6, Math.sin(a)).normalize();
+    grow(new THREE.Vector3(), dir, 0.44+rng()*0.3, 0);
+  }
+  return {pts:pts, cols:cols, spines:spines};
+}
+
+function createNode(m,idx,posOverride){
+  var hub=hubs[m.topic];
+  var pos=posOverride?posOverride.clone():(LAYOUT[idx]?LAYOUT[idx].clone():hub.pos.clone());
+  var local=pos.clone().sub(hub.pos);
+  var conf01=m.conf/100;
+  var group=new THREE.Group();group.position.copy(pos);nodeGroup.add(group);
+
+  var somaMat=new THREE.ShaderMaterial({
+    vertexShader:somaVert, fragmentShader:somaFrag, transparent:true, depthWrite:false,
+    uniforms:{ uFire:{value:0}, uDim:{value:1}, uInhib:{value:m.status==="retracted"?1:0}, uCharge:{value:0} }
+  });
+  var soma=new THREE.Mesh(deformedSoma(idx*1.7),somaMat);
+  soma.scale.setScalar(0.24+conf01*0.15);
+  soma.renderOrder=4;
+  group.add(soma);
+
+  var nucMat=new THREE.SpriteMaterial({map:TEX_GLOW,color:0xffffff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false});
+  var nuc=new THREE.Sprite(nucMat);nuc.scale.set(0.85,0.85,1);group.add(nuc);
+
+  /* ── 细胞器：细胞核 / 核仁 / 线粒体 / 内质网 ── */
+  var nucleusMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.5});
+  var nucleus=new THREE.Mesh(new THREE.SphereBufferGeometry(0.15,14,12),nucleusMat);
+  nucleus.position.set(0.03,-0.02,0.02);group.add(nucleus);
+  var nucleolus=new THREE.Mesh(new THREE.SphereBufferGeometry(0.05,10,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.85}));
+  nucleolus.position.set(0.06,0.015,0.04);group.add(nucleolus);
+  var mitos=[];
+  for(var mi=0;mi<4;mi++){
+    var mm=new THREE.Mesh(new THREE.SphereBufferGeometry(0.05,10,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.3}));
+    mm.scale.set(1,0.4,0.4);
+    var ma=mi/4*Math.PI*2+R()*0.8, mr=0.09+R()*0.07;
+    mm.position.set(Math.cos(ma)*mr,(R()-0.5)*0.13,Math.sin(ma)*mr);
+    group.add(mm);
+    mitos.push({mesh:mm,phase:R()*6.28,base:mm.position.clone(),axis:new THREE.Vector3(R()-0.5,R()-0.5,R()-0.5).normalize()});
+  }
+  var erPts=[];
+  for(var ei=0;ei<=40;ei++){
+    var et=ei/40*Math.PI*2;
+    erPts.push(new THREE.Vector3(Math.cos(et)*0.17,Math.sin(et*3)*0.035,Math.sin(et)*0.17));
+  }
+  var erMat=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.1});
+  var er=new THREE.Line(new THREE.BufferGeometry().setFromPoints(erPts),erMat);
+  er.position.y=-0.04;group.add(er);
+
+  var tree=dendriteTree(mulberry32(1000+idx));
+  var dendMat=new THREE.LineBasicMaterial({color:0xffffff,vertexColors:true,transparent:true,opacity:0});
+  var dend=new THREE.LineSegments(new THREE.BufferGeometry(),dendMat);
+  dend.geometry.addAttribute("position",new THREE.BufferAttribute(flatten(tree.pts),3));
+  dend.geometry.addAttribute("color",new THREE.BufferAttribute(flattenC(tree.cols),3));
+  group.add(dend);
+  /* 树突棘：接收位点（Points + aFlash） */
+  var spineGeo=new THREE.BufferGeometry();
+  spineGeo.addAttribute("position",new THREE.BufferAttribute(flatten(tree.spines),3));
+  var spineFlash=new Float32Array(tree.spines.length);
+  spineGeo.addAttribute("aFlash",new THREE.BufferAttribute(spineFlash,1));
+  var spineMat=new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false,
+    vertexShader:[
+      "attribute float aFlash; varying float vF;",
+      "void main(){ vF=aFlash; vec4 mv=modelViewMatrix*vec4(position,1.0);",
+      "gl_PointSize=(0.9+aFlash*3.2)*(46.0/max(1.0,-mv.z)); gl_Position=projectionMatrix*mv; }"].join("\n"),
+    fragmentShader:[
+      "varying float vF;",
+      "void main(){ float d=length(gl_PointCoord-vec2(0.5)); float a=smoothstep(0.5,0.34,d)*(0.22+vF*0.72);",
+      "gl_FragColor=vec4(vec3(1.0),a); }"].join("\n")
+  });
+  var spines=new THREE.Points(spineGeo,spineMat);
+  group.add(spines);
+
+  /* ── 轴突：轴丘 + 主突 + 髓鞘节段 + 终末扣 ×3 ── */
+  var toHub=hub.pos.clone().sub(pos),hubDist=toHub.length();
+  var far=hubDist>10;
+  var outDir=far? pos.clone().normalize() : toHub.normalize();
+  var axonStart=outDir.clone().multiplyScalar(0.2);
+  var axonEnd=outDir.clone().multiplyScalar(far?1.15:clamp(hubDist*0.5,0.4,1.15));
+  var axonMid=axonStart.clone().lerp(axonEnd,0.5).add(new THREE.Vector3(R()-0.5,R()-0.5,R()-0.5).multiplyScalar(0.18));
+  var axonMat=new THREE.LineBasicMaterial({color:0xffffff,vertexColors:true,transparent:true,opacity:0});
+  var axonPts=[new THREE.Vector3(),axonStart,axonMid,axonEnd];
+  var axonCols=[0.24,0.24,0.24, 0.24,0.24,0.24, 0.42,0.42,0.42, 0.55,0.55,0.55];
+  var axon=new THREE.Line(new THREE.BufferGeometry(),axonMat);
+  axon.geometry.addAttribute("position",new THREE.BufferAttribute(flatten(axonPts),3));
+  axon.geometry.addAttribute("color",new THREE.BufferAttribute(flattenC(axonCols),3));
+  group.add(axon);
+  var hillock=new THREE.Mesh(new THREE.ConeBufferGeometry(0.07,0.18,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.5}));
+  hillock.position.copy(axonStart);
+  hillock.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),outDir.clone().normalize());
+  group.add(hillock);
+  var axonDir2=axonEnd.clone().sub(axonStart).normalize();
+  var myelin=[];
+  [0.3,0.55,0.8].forEach(function(f){
+    var seg=new THREE.Mesh(new THREE.SphereBufferGeometry(0.062,10,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.1}));
+    seg.scale.set(0.82,0.82,2.1);
+    seg.position.copy(axonStart.clone().lerp(axonEnd,f));
+    seg.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),axonDir2);
+    group.add(seg);myelin.push(seg);
+  });
+  var boutons=[];
+  [0.72,0.86,1.0].forEach(function(f,i){
+    var bt=new THREE.Mesh(new THREE.SphereBufferGeometry(0.04+i*0.01,10,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0}));
+    bt.position.copy(axonStart.clone().lerp(axonEnd,f));
+    group.add(bt);boutons.push(bt);
+  });
+
+  var ring=null;
+  if(m.src!=="user"){
+    ring=new THREE.Mesh(new THREE.TorusBufferGeometry(0.34+conf01*0.1,0.008,8,48),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0}));
+    ring.rotation.x=Math.PI/2.4;group.add(ring);
+  }
+  var srMesh=null;
+  if(m.sens==="sensitive"){
+    srMesh=new THREE.Mesh(new THREE.TorusBufferGeometry(0.46+conf01*0.1,0.006,8,48),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0}));
+    srMesh.rotation.x=Math.PI/2.8;srMesh.rotation.y=0.4;group.add(srMesh);
+  }
+
+  var node={m:m,group:group,soma:soma,somaMat:somaMat,nuc:nuc,nucMat:nucMat,dend:dend,dendMat:dendMat,
+    nucleus:nucleus,nucleusMat:nucleusMat,mitos:mitos,erMat:erMat,
+    spines:{pts:tree.spines,geo:spineGeo,flash:spineFlash},
+    axon:axon,axonMat:axonMat,axonPts:axonPts,boutons:boutons,myelin:myelin,hillock:hillock,
+    ring:ring,srMesh:srMesh,mitoBoost:0,
+    phase:R()*Math.PI*2,bright:0,dim:1,fire:0,dimTarget:1,psp:0,spin:0.2+R()*0.5,
+    /* 生理状态 */
+    V:0, refr:0, fat:0, lastSpike:-99, holding:false};
+  soma.userData.node=node;pickables.push(soma);nodes[m.id]=node;nodeList.push(node);
+  return node;
+}
+MEM.forEach(function(m,idx){createNode(m,idx,null)});
+
+/* 纤维束（白质样）：少量平行纤维穿过组织 */
+if(TOPICS.length>6){
+  for(var tr=0;tr<2;tr++){
+    var cpts=[];
+    for(var q=0;q<5;q++)cpts.push(new THREE.Vector3((LR()-0.5)*72,(LR()-0.45)*10,(LR()-0.5)*72));
+    var crv=new THREE.CatmullRomCurve3(cpts);
+    var base=crv.getPoints(64);
+    for(var fb=0;fb<7;fb++){
+      var off=new THREE.Vector3(LR()-0.5,LR()-0.5,LR()-0.5).multiplyScalar(1.5);
+      var line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(base.map(function(p){return p.clone().add(off)})),
+        new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.03}));
+      scene.add(line);
+    }
+  }
+}
+function flatten(v3s){var a=new Float32Array(v3s.length*3);v3s.forEach(function(v,i){a[i*3]=v.x;a[i*3+1]=v.y;a[i*3+2]=v.z});return a}
+function flattenC(cs){return new Float32Array(cs)}
+
+/* ══════════ 突触 ══════════ */
+function sharedTerms(a,b){var s=0;a.forEach(function(t){if(b.indexOf(t)!==-1)s++});return s}
+var synGroup=new THREE.Group();scene.add(synGroup);
+var synapses=[];
+/* 连接：局部为主 + 少量长投射（重尾）；中枢只保留 3–4 条锚定线 */
+var LINKED={};
+function addLink(a,b,strength){
+  if(!a||!b||a===b)return;
+  var key=a.m.id<b.m.id?a.m.id+"|"+b.m.id:b.m.id+"|"+a.m.id;
+  if(LINKED[key])return;
+  LINKED[key]=1;
+  synapses.push(makeSynapse(a,b,strength));
+}
+(function linkTissue(){
+  var localR=TOPICS.length>6?17:10;
+  nodeList.forEach(function(a){
+    var cand=[];
+    nodeList.forEach(function(b){
+      if(b===a)return;
+      var d=a.group.position.distanceTo(b.group.position);
+      if(d<localR)cand.push({b:b,d:d});
+    });
+    cand.sort(function(x,y){return x.d-y.d});
+    var k=2+Math.floor(LR()*4);
+    cand.slice(0,k).forEach(function(o){
+      var p=0.35+Math.exp(-o.d/(localR*0.6))*0.65;
+      if(LR()<p)addLink(a,o.b,0.35+0.45*Math.exp(-o.d/localR));
+    });
+  });
+  var longN=Math.round(nodeList.length*(TOPICS.length>6?0.07:0.12));
+  for(var i=0;i<longN;i++){
+    var a=nodeList[Math.floor(LR()*nodeList.length)];
+    var far=nodeList.filter(function(b){
+      var d=a.group.position.distanceTo(b.group.position);
+      return b!==a&&d>localR*2.2&&d<localR*7;
+    });
+    if(far.length)addLink(a,far[Math.floor(LR()*far.length)],0.3);
+  }
+  TOPICS.forEach(function(tp){
+    var h=hubs[tp.id];
+    nodeList.filter(function(n){return n.m.topic===tp.id})
+      .sort(function(a,b){return a.group.position.distanceTo(h.pos)-b.group.position.distanceTo(h.pos)})
+      .slice(0,3+Math.floor(LR()*2))
+      .forEach(function(n){synapses.push(makeSynapse(n,null,0.7))});
+  });
+})();
+
+/* ══════════ 无限空间画布：区块网格 / 视野剔除 / 生长 ══════════ */
+var CHUNK=26, CULL=TOPICS.length>6?140:95, visList=[], visCount=0, flyTgt=null, mmT=0, statTick=0;
+var lastCam=new THREE.Vector3(1e9,0,0);
+
+function makeGrid(step,opacity,size){
+  var pts=[];
+  for(var i=-size;i<=size;i+=step){
+    pts.push(new THREE.Vector3(-size,0,i),new THREE.Vector3(size,0,i),new THREE.Vector3(i,0,-size),new THREE.Vector3(i,0,size));
+  }
+  var l=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:opacity}));
+  l.position.y=-7;l.frustumCulled=false;scene.add(l);return l;
+}
+var gridFine=makeGrid(4,0.028,132);
+var gridChunk=makeGrid(CHUNK,0.06,132);
+
+function updateCull(force){
+  if(!force&&camTarget.distanceTo(lastCam)<1.2)return;
+  lastCam.copy(camTarget);
+  visList.length=0;visCount=0;
+  nodeList.forEach(function(n){
+    var vis=n.group.position.distanceTo(camTarget)<CULL;
+    n._near=vis;
+    if(!n.birth)n.group.visible=vis;
+    if(vis){visCount++;visList.push(n)}
+  });
+  synapses.forEach(function(s){
+    s.line.visible=s.pts[0].distanceTo(camTarget)<CULL+30;
+    if(s.discA){s.discA.visible=s.line.visible;s.discB.visible=s.line.visible}
+  });
+  Object.keys(hubs).forEach(function(k){
+    var h=hubs[k],v=h.pos.distanceTo(camTarget)<CULL*1.6;
+    h.mesh.visible=v;h.halo.visible=v;h.label.visible=v;
+  });
+}
+
+var GROW_TEXT={
+  astro:["关于行星轨道共振的补充笔记","流星雨观测计划：时间与方位","土星环倾角的又一次查证"],
+  coffee:["新到豆子的风味记录","磨豆刻度与水温的搭配","杯测轮次补遗"],
+  photo:["街头拍摄的快门笔记","灰度曲线的一次新尝试","镜头养护清单"],
+  run:["本周跑量与配速记录","热身序列的补充条目","跑鞋磨损观察"],
+  jazz:["新专辑的聆听笔记","小号练习片段备忘","现场录音的时间戳"]
+};
+var GROW_FALLBACK=["补充说明与后续观察","细节确认：时间与地点","相关联想与对比","待跟进的开放问题"];
+function growText(tp){
+  var pool=GROW_TEXT[tp.id];
+  if(!pool||!pool.length){
+    var lb=(tp.label||tp.id||"记忆").trim();
+    pool=GROW_FALLBACK.map(function(s){return lb+"："+s});
+  }
+  return pool;
+}
+var growSeq=0, GOLD=2.39996323;
+function buddingPos(topic){
+  var pool=nodeList.filter(function(n){return n.m.topic===topic});
+  if(!pool.length)return hubs[topic].pos.clone();
+  /* 优先选邻居少的宿主（组织向外长），并要求与所有已有神经元保持最小间距 */
+  var scored=pool.map(function(n){
+    var c=0;
+    nodeList.forEach(function(b){ if(b!==n&&b.group.position.distanceTo(n.group.position)<4.5)c++; });
+    return {n:n,c:c};
+  }).sort(function(a,b){return a.c-b.c});
+  var hosts=scored.slice(0,Math.max(3,Math.ceil(scored.length*0.4)));
+  var MIN=4.8;
+  for(var t=0;t<90;t++){
+    var host=hosts[Math.floor(LR()*hosts.length)].n.group.position;
+    var dir=new THREE.Vector3(LR()-0.5,LR()-0.5,LR()-0.5).normalize();
+    var outward=host.clone().normalize().multiplyScalar(1.0);
+    var p=host.clone().addScaledVector(dir,5.2+LR()*5.6).add(outward);
+    var ok=true;
+    for(var i=0;i<nodeList.length;i++){
+      if(nodeList[i].group.position.distanceTo(p)<MIN){ok=false;break}
+    }
+    if(ok)return p;
+  }
+  /* 兜底：更远的稀疏位（避免堆在密核里） */
+  var h2=hosts[0].n.group.position;
+  return h2.clone().add(new THREE.Vector3(LR()-0.5,LR()-0.5,LR()-0.5).normalize().multiplyScalar(14+LR()*6));
+}
+var spiralPos=buddingPos;
+function makeMemory(){
+  growSeq++;
+  var tp=TOPICS[growSeq%TOPICS.length], texts=growText(tp);
+  var text="记忆片段 "+String(growSeq).padStart(4,"0")+"："+texts[growSeq%texts.length];
+  var m={id:"mem-g"+String(growSeq).padStart(4,"0"),t:text,topic:tp.id,
+    src:["user","user","inferred","turn"][growSeq%4],conf:55+Math.floor(rng()*40),
+    status:"active",sens:"normal",changes:["created"],cd:0,fd:0};
+  m.text=m.t;m.terms=terms(m.text);
+  return m;
+}
+function linkLocal(node){
+  var cand=[];
+  nodeList.forEach(function(x){
+    if(x===node)return;
+    var d=x.group.position.distanceTo(node.group.position);
+    if(d<24)cand.push({n:x,d:d,same:x.m.topic===node.m.topic});
+  });
+  cand.sort(function(a,b){return (b.same-a.same)||(a.d-b.d)});
+  cand.slice(0,2).forEach(function(o){synapses.push(makeSynapse(node,o.n,0.5))});
+}
+function birthNode(m,pos){
+  MEM.push(m);
+  var node=createNode(m,MEM.length-1,pos);
+  /* 生长锥从宿主（最近的同类神经元）胞体出发，而不是从中枢穿出来 */
+  var hostPos=hubs[m.topic].pos.clone(),best=1e9;
+  nodeList.forEach(function(x){
+    if(x===node||x.m.topic!==m.topic)return;
+    var d=x.group.position.distanceTo(pos);
+    if(d<best){best=d;hostPos=x.group.position.clone()}
+  });
+  node.birth={t:0,from:hostPos,fil:null,cone:null,done:false};
+  var fil=new THREE.Line(new THREE.BufferGeometry().setFromPoints([node.birth.from.clone(),pos.clone()]),
+    new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.45}));
+  scene.add(fil);node.birth.fil=fil;
+  var cone=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX_GLOW,color:0xffffff,transparent:true,opacity:0.9,blending:THREE.AdditiveBlending,depthWrite:false}));
+  cone.scale.set(0.8,0.8,1);cone.position.copy(node.birth.from);scene.add(cone);node.birth.cone=cone;
+  node.group.scale.setScalar(0.14);
+  linkLocal(node);
+  return node;
+}
+function growMemories(n){
+  for(var i=0;i<n;i++){
+    (function(k){
+      setTimeout(function(){
+        try{
+          var m=makeMemory();
+          birthNode(m,buddingPos(m.topic));
+          updateStats(true);
+        }catch(err){ if(window.console)console.warn("grow skipped",err&&err.message) }
+      },k*70);
+    })(i);
+  }
+}
+function flyTo(pos,r){
+  flyTgt=pos.clone();
+  if(r)orbit.radius=clamp(r,6,150);
+}
+
+var mmCanvas=document.getElementById("minimap"), mmX=mmCanvas.getContext("2d");
+function drawMinimap(){
+  var W=mmCanvas.width,S=W/(BASE_R*2.6);
+  mmX.clearRect(0,0,W,W);
+  var cx=W/2,cz=W/2;
+  nodeList.forEach(function(nd){
+    var x=cx+nd.group.position.x*S,y=cz+nd.group.position.z*S;
+    if(x<1||y<1||x>W-1||y>W-1)return;
+    mmX.fillStyle=nd.m.status==="active"?"rgba(255,255,255,.85)":"rgba(110,110,110,.7)";
+    mmX.fillRect(x-1,y-1,2,2);
+  });
+  mmX.strokeStyle="rgba(255,255,255,.22)";mmX.strokeRect(cx-4,cz-4,8,8);
+  mmX.strokeStyle="rgba(255,255,255,.55)";mmX.lineWidth=1.5;
+  mmX.beginPath();mmX.arc(cx+camTarget.x*S,cz+camTarget.z*S,Math.max(7,orbit.radius*S*0.55),0,Math.PI*2);mmX.stroke();
+}
+function makeSynapse(nA, nB, strength){
+  var p1=nA.group.position.clone();
+  var jpos=null, spineIdx=-1;
+  if(nB&&nB.spines&&nB.spines.pts.length){
+    spineIdx=Math.floor(rng()*nB.spines.pts.length);
+    jpos=nB.group.position.clone().add(nB.spines.pts[spineIdx].clone().multiplyScalar(1.25));
+  }
+  var p2=(jpos?jpos:hubs[nA.m.topic].pos).clone();
+  var mid=p1.clone().add(p2).multiplyScalar(0.5);
+  var off=p1.clone().sub(p2).cross(new THREE.Vector3(0,1,0)).normalize().multiplyScalar(0.6+p1.distanceTo(p2)*0.12);
+  mid.add(off);
+  var curve=new THREE.QuadraticBezierCurve3(p1,mid,p2);
+  var pts=curve.getPoints(28);
+  var mat=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.05+strength*0.1});
+  var line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat);
+  synGroup.add(line);
+  /* 突触接头：突触前膜盘 / 间隙 / 突触后膜盘（落在目标神经元棘刺上） */
+  var discA=null, discB=null;
+  if(jpos){
+    var dir=p1.clone().sub(p2).normalize();
+    var discGeo=new THREE.CircleBufferGeometry(0.062,14);
+    discA=new THREE.Mesh(discGeo,new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.2,side:THREE.DoubleSide}));
+    discA.position.copy(p2.clone().addScaledVector(dir,0.075));
+    discA.lookAt(p2);scene.add(discA);
+    discB=new THREE.Mesh(discGeo.clone(),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.14,side:THREE.DoubleSide}));
+    discB.position.copy(p2.clone().addScaledVector(dir,0.005));
+    discB.lookAt(p2);scene.add(discB);
+  }
+  return {nA:nA, nB:nB, line:line, mat:mat, pts:pts, strength:strength, boost:0, base:0.05+strength*0.1,
+    spineIdx:spineIdx, jpos:jpos, discA:discA, discB:discB, flashA:0, dep:1};
+}
+
+/* ══════════ 生理引擎 ══════════
+   膜电位 V∈[-0.4,1.2]，阈值 1 → 全或无发放；不应期；疲劳；
+   动作电位沿「轴突+突触弧」传导 → 终末扣囊泡释放 → 跨间隙 → 下游 PSP；
+   赫布学习：相连双元近同时发放 → 突触 boost；撤销记忆 = 抑制性。 */
+var spikes=[], vesicles=[], rings=[];
+var vesTotal=0;
+var mode="exc";
+var now=0;
+
+function isNodeEnd(s, n){ return s.nA===n || s.nB===n; }
+function otherEnd(s, n){ return s.nA===n ? s.nB : s.nA; }
+
+function trySpike(n, force){
+  if(n.refr>0 && !force) return false;
+  if(n.V<1 && !force) return false;
+  n.V=0; n.refr=0.9; n.fat=Math.min(1,n.fat+0.14); n.fire=1.25; n.mitoBoost=1;
+  spawnRing(n.group.position, 1.8+n.m.conf/100*0.8);
+  n.lastSpike=now;
+  /* 轴突（世界坐标）+ 每条相连突触的传导 */
+  var axWorld=n.axonPts.map(function(p){return n.group.localToWorld(p.clone())});
+  /* 只沿真实因果链传导：主突触立即出发，其余按强度依次延后（传导有先后，不齐发） */
+  var outs=[];
+  synapses.forEach(function(s){
+    if(!isNodeEnd(s,n)) return;
+    outs.push(s);
+  });
+  outs.sort(function(a,b){return (b.strength+b.boost)-(a.strength+a.boost)});
+  outs.forEach(function(s,i){
+    var rev=(s.nB===n);
+    var arc=rev? s.pts.slice(1).reverse() : s.pts.slice(1);
+    spawnSpike(axWorld.concat(arc), n, s, i===0?0:i*0.055+Math.random()*0.03);
+  });
+  hebbian(n);
+  return true;
+}
+function spawnSpike(pts, fromNode, syn, delay){
+  var head=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX_GLOW,color:0xffffff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
+  head.scale.set(0.55,0.55,1);scene.add(head);
+  var tail=new THREE.Sprite(head.material.clone());tail.scale.set(0.34,0.34,1);scene.add(tail);
+  spikes.push({pts:pts,t:0,speed:1.5,head:head,tail:tail,from:fromNode,syn:syn,delay:delay||0});
+}
+function releaseVesicles(pos, targetNode, inhib, n){
+  vesTotal+=4;
+  for(var i=0;i<4;i++){
+    var s=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX_GLOW,color:0xffffff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
+    s.position.copy(pos);s.scale.set(0.14,0.14,1);scene.add(s);
+    var v=new THREE.Vector3(rng()-0.5,rng()-0.5,rng()-0.5).multiplyScalar(1.4);
+    if(targetNode) v.add(targetNode.group.position.clone().sub(pos).normalize().multiplyScalar(0.9));
+    vesicles.push({s:s,v:v,life:0.42+Math.random()*0.2,target:targetNode,inhib:inhib});
+  }
+}
+function applyPSP(node, w, inhib){
+  if(!node) return;
+  node.V=clamp(node.V+(inhib?-w:w), -0.4, 1.25);
+  node.psp=1;
+  if(!inhib && node.V>=1) trySpike(node);
+}
+function hebbian(n){
+  synapses.forEach(function(s){
+    if(!s.nB) return;
+    if(!isNodeEnd(s,n)) return;
+    var other=otherEnd(s,n);
+    if(Math.abs(other.lastSpike-now)<1.2 && other.lastSpike>0){
+      s.boost=Math.min(1,s.boost+0.4);
+      s.line.userData.ltp=(s.line.userData.ltp||0)+1;
+    }
+  });
+}
+/* 对外 API：刺激（可触发级联） */
+function stimulate(n, amount){
+  n.V=clamp(n.V+(amount||1), -0.4, 1.25);
+  return trySpike(n);
+}
+function inject(n, dir, dt){
+  n.V=clamp(n.V+dir*dt*0.85, -0.4, 1.25);
+  if(dir>0 && n.V>=1) trySpike(n);
+}
+var fire=stimulate; /* 兼容旧调用 */
+
+/* ══════════ 交互 ══════════ */
+var ray=new THREE.Raycaster(), mouse=new THREE.Vector2(), hovered=null, selected=null;
+var dragging=false,px=0,py=0,pinch=0,downX=0,downY=0;
+var tourMode=false;
+var holdNode=null, holdStart=0, injected=false, panMode=false;
+
+stage.addEventListener("contextmenu",function(e){e.preventDefault()});
+stage.addEventListener("pointerdown",function(e){
+  dragging=true;px=downX=e.clientX;py=downY=e.clientY;stage.classList.add("grabbing");
+  panMode=(e.button===1||e.button===2||e.shiftKey);
+  if(panMode)e.preventDefault();
+  tourMode=false;syncTourBtn();
+  mouse.x=(e.clientX/window.innerWidth)*2-1;mouse.y=-(e.clientY/window.innerHeight)*2+1;
+  ray.setFromCamera(mouse,camera);
+  var hit=ray.intersectObjects(pickables)[0];
+  holdNode=hit?hit.object.userData.node:null;holdStart=now;injected=false;
+  stage.setPointerCapture&&stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener("pointermove",function(e){
+  if(dragging){
+    if(Math.hypot(e.clientX-downX,e.clientY-downY)>6) holdNode=null;
+    if(panMode){
+      var scl=orbit.radius*0.0016;
+      var right=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0);
+      var up=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,1);
+      camTarget.addScaledVector(right,-(e.clientX-px)*scl).addScaledVector(up,(e.clientY-py)*scl);
+    } else {
+      orbit.theta-=(e.clientX-px)*0.0055;orbit.phi=clamp(orbit.phi-(e.clientY-py)*0.0045,0.25,2.85);
+    }
+    px=e.clientX;py=e.clientY;return;
+  }
+  mouse.x=(e.clientX/window.innerWidth)*2-1;mouse.y=-(e.clientY/window.innerHeight)*2+1;
+  ray.setFromCamera(mouse,camera);
+  var hit=ray.intersectObjects(pickables)[0];
+  var node=hit?hit.object.userData.node:null;
+  if(node!==hovered){
+    hovered=node;
+    stage.classList.toggle("hovering",!!node);
+    var tip=el("tooltip");
+    if(node){var m=node.m;
+      tip.innerHTML='<div class="tt-no">'+m.id.toUpperCase()+" · "+hubs[m.topic].tp.label+" · "+srcLabel(m.src)+"</div>"+
+        '<p class="tt-tx">'+displayText(m)+"</p>"+
+        '<div class="tt-v"><i id="ttFill"></i></div>'+
+        '<div class="tt-st" id="ttState">静息</div>';
+      tip.style.opacity=1;
+    } else tip.style.opacity=0;
+  }
+  if(node){var tip2=el("tooltip");tip2.style.left=Math.min(window.innerWidth-260,e.clientX+14)+"px";tip2.style.top=(e.clientY+14)+"px";}
+});
+stage.addEventListener("pointerup",function(e){
+  dragging=false;stage.classList.remove("grabbing");
+  var wasInject=injected;
+  holdNode=null;
+  if(wasInject) return;
+  if(Math.abs(e.clientX-downX)<4&&Math.abs(e.clientY-downY)<4){
+    mouse.x=(e.clientX/window.innerWidth)*2-1;mouse.y=-(e.clientY/window.innerHeight)*2+1;
+    ray.setFromCamera(mouse,camera);
+    var hit=ray.intersectObjects(pickables)[0];
+    if(hit) select(hit.object.userData.node); else closeDetail();
+  }
+});
+stage.addEventListener("wheel",function(e){
+  e.preventDefault();
+  orbit.radius=clamp(orbit.radius*(e.deltaY>0?1.08:0.93),6,150);
+},{passive:false});
+var touches={};
+stage.addEventListener("pointerdown",function(e){touches[e.pointerId]=e});
+stage.addEventListener("pointermove",function(e){
+  touches[e.pointerId]=e;
+  var ids=Object.keys(touches);
+  if(ids.length===2){
+    var d=Math.hypot(touches[ids[0]].clientX-touches[ids[1]].clientX,touches[ids[0]].clientY-touches[ids[1]].clientY);
+    if(pinch) orbit.radius=clamp(orbit.radius*(pinch/d),6,150);
+    pinch=d;
+  }
+});
+stage.addEventListener("pointerup",function(e){delete touches[e.pointerId];pinch=0});
+stage.addEventListener("pointercancel",function(e){delete touches[e.pointerId];pinch=0});
+
+function srcLabel(s){return s==="user"?"用户明确输入":s==="inferred"?"模型推断·已确认":"轮次派生·已确认"}
+function sensLabel(s){return s==="normal"?"普通":s==="personal"?"个人信息":"敏感"}
+function statusLabel(m){return m.status==="active"?(m.stale?"有效·逾期未确认":"有效"):"已撤销"}
+
+/* ══════════ 详情面板 ══════════ */
+function select(node){
+  selected=node;renderDetail(node.m);
+  var d=el("detail");d.hidden=false;requestAnimationFrame(function(){d.classList.add("open")});
+  spawnRing(node.group.position,2.4);
+}
+function closeDetail(){
+  var d=el("detail");d.classList.remove("open");
+  selected=null;
+  setTimeout(function(){if(!selected)d.hidden=true},340);
+}
+el("dClose").addEventListener("click",closeDetail);
+
+function renderDetail(m){
+  var node=nodes[m.id];
+  el("dNo").textContent=m.id.toUpperCase()+" · REVISION "+m.changes.length;
+  el("dTopicName").textContent=hubs[m.topic].tp.label+" 记忆";
+  el("dSub").textContent=srcLabel(m.src)+" · "+sensLabel(m.sens)+" · "+statusLabel(m);
+  el("dText").textContent=displayText(m);
+  var age=(m.fd!=null?m.fd:m.cd);
+  el("dGrid").innerHTML=
+    cell("来源分类",srcLabel(m.src))+cell("置信度",m.conf+" / 100")+
+    cell("最近确认",daysText(age))+cell("修订次数",m.changes.length+" 次")+
+    cell("敏感度",sensLabel(m.sens))+cell("状态",statusLabel(m));
+  var rev=el("dRev");rev.innerHTML="";
+  var labels={created:"创建",corrected:"更正",retracted:"撤销",restored:"恢复",confirmed:"再次确认"};
+  for(var v=0;v<m.changes.length;v++){
+    var li=document.createElement("li");
+    li.innerHTML='<span class="rv-v">v'+(v+1)+"</span><span class='rv-t'>"+labels[m.changes[v]]+"</span><span class='rv-d'>"+daysText(Math.max(0,m.cd-(v*7)))+"</span>";
+    rev.appendChild(li);
+  }
+  var act=el("dActions");act.innerHTML="";
+  if(m.status==="active"){
+    var b1=document.createElement("button");b1.type="button";b1.className="btn primary small";b1.textContent="确认记忆（confidence +5）";
+    b1.addEventListener("click",function(){doConfirm(m)});
+    var b2=document.createElement("button");b2.type="button";b2.className="btn dashed small";b2.textContent="撤销记忆";
+    b2.addEventListener("click",function(){doRetract(m)});
+    act.appendChild(b1);act.appendChild(b2);
+  } else {
+    var b3=document.createElement("button");b3.type="button";b3.className="btn small";b3.textContent="恢复记忆";
+    b3.addEventListener("click",function(){doRestore(m)});
+    act.appendChild(b3);
+  }
+  if(m.sens==="sensitive"){
+    var note=document.createElement("p");note.className="d-note";note.textContent="敏感级记忆默认不进入任何请求；在本原型中同样不参与「预演检索装载」。";
+    act.after(note);
+  }
+  function cell(k,v){return "<div class='cell'><dt>"+k+"</dt><dd>"+v+"</dd></div>"}
+}
+function doConfirm(m){
+  m.conf=Math.min(100,m.conf+5);m.fd=0;m.stale=false;
+  if(m.changes[m.changes.length-1]!=="confirmed")m.changes.push("confirmed");
+  var node=nodes[m.id];
+  stimulate(node,1.25);
+  spawnRing(node.group.position,3);
+  node.dend.scale.setScalar(1.3);
+  toast(m.id.toUpperCase()+" 已再次确认 · confidence "+m.conf+"/100 · 突触生长");
+  renderDetail(m);updateStats();
+}
+function doRetract(m){
+  m.status="retracted";m.changes.push("retracted");
+  var node=nodes[m.id];node.fire=0;
+  spawnRing(node.group.position,1.6);
+  toast(m.id.toUpperCase()+" 已撤销 · 转为抑制性，相关激活被压制");
+  renderDetail(m);updateStats();applyFilter();
+}
+function doRestore(m){
+  m.status="active";m.changes.push("restored");m.fd=0;
+  var node=nodes[m.id];
+  stimulate(node,1.2);
+  spawnRing(node.group.position,2.6);
+  toast(m.id.toUpperCase()+" 已恢复 · 树突再生，重新进入有效检索");
+  renderDetail(m);updateStats();applyFilter();
+}
+
+/* ══════════ 检索 / 装载 / 筛选 / 模式 ══════════ */
+var currentHits=[];
+function clearSearchVisual(){currentHits=[];MEM.forEach(function(m){nodes[m.id].dimTarget=1});el("budgetText").textContent="装配预算待命";el("budgetFill").style.width="0"}
+function runSearch(){
+  var q=el("q").value.trim();
+  if(!q){clearSearchVisual();return}
+  var ranked=MEM.map(function(m){return rankOf(m,q)}).sort(function(a,b){return b.rank-a.rank});
+  var hits=ranked.filter(function(r){return (r.m.text.toLowerCase().indexOf(q.toLowerCase())!==-1)||terms(q).some(function(t){return r.m.terms.indexOf(t)!==-1})});
+  if(!hits.length){toast("无命中：检索只扫描词项与短语");return}
+  currentHits=hits.slice(0,8).map(function(r){return r.m});
+  var hitSet={};currentHits.forEach(function(m){hitSet[m.id]=1});
+  MEM.forEach(function(m){nodes[m.id].dimTarget=hitSet[m.id]?1:0.12});
+  currentHits.forEach(function(m,i){
+    setTimeout(function(){
+      var n=nodes[m.id];
+      if(m.status==="active") stimulate(n,1.15); else {n.fire=0.9;spawnRing(n.group.position,1.2)}
+    },i*130);
+  });
+  var total=currentHits.reduce(function(s,m){return s+m.text.length+40},0);
+  setBudget(total,currentHits.length);
+  toast("命中 "+hits.length+" 条，按 rank 依次去极化");
+}
+function setBudget(chars,n){
+  el("budgetText").textContent="已装入 "+chars.toLocaleString()+" / 3,000 字符 · "+n+" 条";
+  el("budgetFill").style.width=Math.min(100,chars/3000*100)+"%";
+}
+el("searchForm").addEventListener("submit",function(e){e.preventDefault();runSearch()});
+el("q").addEventListener("input",function(){if(!el("q").value)clearSearchVisual()});
+
+el("assemble").addEventListener("click",function(){
+  var q=el("q").value.trim();
+  var ranked=MEM.filter(function(m){return m.status==="active"&&(sensitiveApproved||m.sens!=="sensitive")})
+    .map(function(m){return rankOf(m,q||m.terms[0]||"")}).sort(function(a,b){return b.rank-a.rank});
+  var budget=3000,packed=[],chars=0;
+  ranked.forEach(function(r){
+    var c=r.m.text.length+40;
+    if(chars+c<=budget&&packed.length<20){packed.push(r.m);chars+=c}
+  });
+  currentHits=packed;
+  var hitSet={};packed.forEach(function(m){hitSet[m.id]=1});
+  MEM.forEach(function(m){nodes[m.id].dimTarget=hitSet[m.id]?1:0.1});
+  packed.forEach(function(m,i){
+    setTimeout(function(){if(m.status==="active")stimulate(nodes[m.id],1.1)},i*90);
+  });
+  setBudget(chars,packed.length);
+  toast("assembleContext 演算：贪心装入 "+packed.length+" 条，敏感级已排除");
+});
+
+el("modeExc").addEventListener("click",function(){setMode("exc")});
+el("modeInh").addEventListener("click",function(){setMode("inh")});
+function setMode(v){
+  mode=v;
+  el("modeExc").setAttribute("aria-pressed",String(v==="exc"));
+  el("modeInh").setAttribute("aria-pressed",String(v==="inh"));
+  toast(v==="exc"?"刺激模式：按住神经元注入去极化电流":"抑制模式：按住神经元注入超极化电流");
+}
+
+el("tour").addEventListener("click",function(){tourMode=!tourMode;syncTourBtn();if(tourMode)toast("漫游中：拖拽或点击任意处退出")});
+function syncTourBtn(){el("tour").setAttribute("aria-pressed",String(tourMode))}
+el("reset").addEventListener("click",function(){
+  orbit.theta=0.6;orbit.phi=1.22;orbit.radius=BASE_R;camTarget.set(0,0,0);flyTgt=null;
+  toast("视角已重置");
+});
+el("growOne").addEventListener("click",function(){
+  growMemories(1);
+  toast(DATA_MODE==="live"?"模拟新记忆：从宿主神经元芽生（仅本次会话，不写回数据源）":"芽生 1 条新记忆：贴着同类神经元长出生长锥");
+});
+el("grow100").addEventListener("click",function(){
+  growMemories(100);
+  toast(DATA_MODE==="live"?"压力测试：+100 条模拟记忆（不写回数据源）":"压力测试：+100 条记忆正在生长");
+});
+el("flyNew").addEventListener("click",function(){
+  if(!MEM.length)return;
+  var last=MEM[MEM.length-1],n=nodes[last.id];
+  if(!n)return;
+  flyTo(n.group.position,14);
+  toast("飞向最新记忆 "+last.id.toUpperCase());
+});
+el("approveSensitive").addEventListener("click",function(){
+  sensitiveApproved=!sensitiveApproved;
+  el("approveSensitive").setAttribute("aria-pressed",String(sensitiveApproved));
+  if(selected)renderDetail(selected.m);
+  toast(sensitiveApproved?"本次已批准：敏感级内容可读，并可进入装载":"已收回批准：敏感级重新脱敏");
+});
+
+/* 模拟接入：角标 / 快照元数据 */
+if(MODE==="live"){
+  el("liveBadge").hidden=false;
+  el("metaBtn").hidden=false;
+  var c=SNAP.counts||{};
+  el("metaSub").textContent=(SNAP.snapshot_version||"snapshot").toUpperCase()+" · "+(SNAP.generated_at||"").slice(0,10);
+  var mkCell=function(k,v){return "<div class='mcell'><dt>"+k+"</dt><dd>"+v+"</dd></div>"};
+  el("metaGrid").innerHTML=mkCell("记忆总数",c.memories)+mkCell("有效",c.active)+mkCell("已撤销",c.retracted)+
+    mkCell("敏感级",c.sensitive)+mkCell("逾期未确认",c.stale)+mkCell("兴趣",c.interests);
+  el("metaEvents").innerHTML=(SNAP.events||[]).map(function(ev){
+    return "<li><span>"+ev.occurred_at_hours_ago+"h</span><span>"+ev.event_type+"</span><span>"+ev.subject_id+"</span></li>";
+  }).join("");
+  el("metaNote").textContent=(SNAP.note||"")+" 静态快照模式（"+
+    (SNAP.schema?"memories v"+SNAP.schema.memories+" / interests v"+SNAP.schema.interests:"")+"）。";
+  el("metaBtn").addEventListener("click",function(){
+    var p=el("metaPanel");p.hidden=!p.hidden;
+    el("metaBtn").setAttribute("aria-pressed",String(!p.hidden));
+  });
+}
+
+var filter="all";
+document.querySelectorAll(".chip").forEach(function(c){
+  c.addEventListener("click",function(){
+    filter=c.getAttribute("data-f");
+    document.querySelectorAll(".chip").forEach(function(x){x.setAttribute("aria-pressed",String(x===c))});
+    currentHits=[];el("q").value="";
+    el("budgetText").textContent="装配预算待命";el("budgetFill").style.width="0";
+    applyFilter();
+  });
+});
+function matchFilter(m){
+  if(filter==="all")return true;
+  if(filter==="active")return m.status==="active";
+  if(filter==="retracted")return m.status==="retracted";
+  if(filter==="stale")return !!m.stale;
+  if(filter==="sensitive")return m.sens==="sensitive";
+  if(filter==="inferred")return m.src!=="user";
+  return true;
+}
+function applyFilter(){
+  MEM.forEach(function(m){nodes[m.id].dimTarget=matchFilter(m)?1:0.1});
+}
+document.addEventListener("keydown",function(e){
+  if(e.key==="/"&&document.activeElement!==el("q")){e.preventDefault();el("q").focus()}
+  if(e.key==="Escape"){clearSearchVisual();closeDetail()}
+});
+
+function updateStats(force){
+  statTick++;
+  if(!force&&statTick%10)return;
+  var active=MEM.filter(function(m){return m.status==="active"}).length;
+  var stale=MEM.filter(function(m){return m.stale}).length;
+  var inhib=MEM.filter(function(m){return m.status==="retracted"}).length;
+  var cx=Math.floor(camTarget.x/CHUNK),cz=Math.floor(camTarget.z/CHUNK);
+  el("stats").textContent="总记忆 "+MEM.length+" · 视野内 "+visCount+" · 区块 ("+cx+","+cz+") · 突触 "+synapses.length+
+    " · 有效 "+active+" · 逾期 "+stale+" · 抑制性 "+inhib+" · 模式 "+(mode==="exc"?"刺激":"抑制")+" · 源 "+(MODE==="live"?"snapshot":"demo");
+}
+updateCull(true);
+(function frameRadius(){
+  var bb=new THREE.Box3();
+  nodeList.forEach(function(n){bb.expandByPoint(n.group.position)});
+  var sp=bb.getBoundingSphere(new THREE.Sphere());
+  BASE_R=clamp(sp.radius*1.5,14,120);
+  orbit.radius=BASE_R;
+  if(TOPICS.length>6)CULL=Math.max(CULL,Math.round(BASE_R*1.8));
+  if(window.__cage&&TOPICS.length>6)window.__cage.scale.setScalar(clamp(sp.radius*1.3/54,0.7,1.7));
+})();
+updateStats(true);
+
+/* ══════════ 动画循环 ══════════ */
+var clock=new THREE.Clock();
+var idleTimer=4.5, ttTimer=0;
+function frame(){
+  requestAnimationFrame(frame);
+  var dt=Math.min(0.05,clock.getDelta());now+=dt;var t=clock.elapsedTime;
+
+  orbit.theta+=(tourMode? dt*0.11:0);
+  applyCamera();
+  if(window.__cage&&!reduceMotion)window.__cage.rotation.y+=dt*0.012;
+
+  /* 按住注入 */
+  if(holdNode&&now-holdStart>0.38){
+    injected=true;stage.classList.add("injecting");
+    inject(holdNode, mode==="inh"?-1:1, dt);
+  } else stage.classList.remove("injecting");
+
+  /* 悬停探针：微去极化 */
+  if(hovered&&hovered.refr<=0&&!reduceMotion){
+    hovered.V=Math.min(hovered.V+dt*0.55,0.92);
+  }
+
+  /* 自发放：低频、局部、且同一时刻只允许一个事件（避免满屏闪烁） */
+  if(!reduceMotion){
+    idleTimer-=dt;
+    if(idleTimer<=0&&spikes.length===0&&vesicles.length===0){
+      idleTimer=9+Math.random()*9;
+      var pool=nodeList.filter(function(n){
+        return n.m.status==="active"&&!n.birth&&n.group.position.distanceTo(camTarget)<CULL*0.7;
+      });
+      if(pool.length){
+        var pick=pool[Math.floor(Math.random()*pool.length)];
+        stimulate(pick, 1.06+Math.random()*0.2);
+      }
+    }
+  }
+
+  /* 无限画布：剔除 / 网格跟随 / 飞行 / 缩略图 */
+  updateCull(false);
+  gridFine.position.set(Math.round(camTarget.x/4)*4,-7,Math.round(camTarget.z/4)*4);
+  gridChunk.position.set(Math.round(camTarget.x/CHUNK)*CHUNK,-7,Math.round(camTarget.z/CHUNK)*CHUNK);
+  if(flyTgt){camTarget.lerp(flyTgt,Math.min(1,dt*2.2));if(camTarget.distanceTo(flyTgt)<0.4)flyTgt=null;}
+  mmT-=dt;if(mmT<=0){mmT=0.12;drawMinimap();}
+  updateStats(false);
+
+  visList.forEach(function(n){
+    var m=n.m;
+    n.dim=lerp(n.dim,n.dimTarget,dt*5);
+    /* 膜漏电 + 状态推进 */
+    if(n.refr>0)n.refr-=dt;
+    n.fat*= (1-dt*0.12);
+    n.V*= (1-dt*0.4); if(Math.abs(n.V)<0.005)n.V=0;
+    n.fire*=(1-dt*3.2);
+    n.psp*=(1-dt*4.5);
+    var v01=clamp(Math.max(0,n.V),0,1);
+    var retracted=m.status==="retracted";
+    var base=(0.4+m.conf/100*0.45)*(1-n.fat*0.38);
+    var br=clamp((retracted?0.14:base)+n.fire*0.5+Math.max(0,n.V)*0.18,0,1.3)*n.dim;
+    n.somaMat.uniforms.uFire.value=clamp(n.fire+n.psp*0.6,0,1.4);
+    n.somaMat.uniforms.uDim.value=n.dim;
+    n.somaMat.uniforms.uInhib.value=retracted?1:0;
+    n.somaMat.uniforms.uCharge.value=v01;
+    n.soma.scale.setScalar((0.24+m.conf/100*0.15)*(1+n.psp*0.2+n.fire*0.16+(hovered===n||selected===n?0.12:0)));
+    var beat=(hovered===n||selected===n||n.refr>0)
+      ? (Math.sin(t*(1.4+n.phase%0.4)+n.phase)*0.5+0.5)
+      : 0.12; /* 静息：几乎不动；只有被激活/悬停的神经元才有呼吸 */
+    n.nucMat.opacity=clamp((n.refr>0?0.12:(0.2+v01*0.55+beat*0.1+n.fire*0.35))*(retracted?0.55:1)*n.dim,0,1);
+    n.nuc.scale.setScalar(0.6+v01*0.3+n.fire*0.4+((hovered===n||selected===n)?beat*0.16:0));
+    n.dendMat.opacity=(retracted?0.05:0.15+0.12*v01)*n.dim;
+    if(n.dend.scale.x>1)n.dend.scale.multiplyScalar(1-dt*1.4);
+    n.axonMat.opacity=(retracted?0.06:0.24+0.14*v01)*n.dim;
+    n.boutons.forEach(function(b,i2){b.material.opacity=(retracted?0.06:0.3+0.2*v01)*n.dim});
+    if(n.ring)n.ring.material.opacity=(retracted?0.08:0.4)*n.dim;
+    if(n.srMesh)n.srMesh.material.opacity=(m.status==="active"?0.3+(n.refr>0?Math.sin(t*6+n.phase*3)*0.1:0):0.08)*n.dim;
+    /* 细胞器动态：线粒体随发放加速漂移（代谢响应） */
+    n.mitoBoost*=(1-dt*0.55);
+    var mspd=0.08+n.mitoBoost*5+n.fat*1.2;
+    n.mitos.forEach(function(mo){
+      mo.mesh.position.set(
+        mo.base.x+Math.sin(t*mspd+mo.phase)*0.012,
+        mo.base.y+Math.sin(t*mspd*1.3+mo.phase*1.7)*0.011,
+        mo.base.z+Math.cos(t*mspd*0.8+mo.phase)*0.012);
+      mo.mesh.rotation.x+=dt*(0.05+n.mitoBoost*3.4);
+      mo.mesh.rotation.z+=dt*0.2;
+      mo.mesh.material.opacity=clamp((0.26+n.mitoBoost*0.45+n.fat*0.15)*n.dim,0,0.9);
+    });
+    n.nucleusMat.opacity=clamp((0.3+v01*0.5+n.fire*0.15)*(retracted?0.4:1)*n.dim,0,0.9);
+    n.nucleus.scale.setScalar(1+v01*0.12+n.fire*0.15);
+    n.erMat.opacity=(retracted?0.04:0.09+0.06*v01)*n.dim;
+    n.myelin.forEach(function(sg){sg.material.opacity=(retracted?0.04:0.09+0.07*v01)*n.dim});
+    n.hillock.material.opacity=(retracted?0.1:0.35+0.2*v01)*n.dim;
+    /* 棘刺闪光衰减 */
+    var fArr=n.spines.flash,dirty=false;
+    for(var si=0;si<fArr.length;si++){if(fArr[si]>0){fArr[si]*=(1-dt*3.2);if(fArr[si]<0.01)fArr[si]=0;dirty=true;}}
+    if(dirty)n.spines.geo.attributes.aFlash.needsUpdate=true;
+  });
+
+  /* 出生动画：生长锥爬行 → 胞体膨胀 → 动作电位 */
+  nodeList.forEach(function(n){
+    if(!n.birth)return;
+    var b=n.birth;b.t+=dt*1.1;
+    var e=Math.min(1,b.t);
+    var p=b.from.clone().lerp(n.group.position,e);
+    if(b.cone)b.cone.position.copy(p);
+    if(b.fil){
+      var seg=Math.max(2,Math.floor(e*26)),pts=[];
+      for(var k=0;k<seg;k++)pts.push(b.from.clone().lerp(n.group.position,k/(seg-1)));
+      b.fil.geometry.setFromPoints(pts);
+    }
+    if(!b.done&&b.t>=1.05){
+      b.done=true;
+      n.group.scale.setScalar(1.35);
+      if(b.fil){b.fil.material.dispose();scene.remove(b.fil);b.fil=null}
+      if(b.cone){b.cone.material.dispose();scene.remove(b.cone);b.cone=null}
+      spawnRing(n.group.position,2.2);
+      stimulate(n,1.15);
+      updateStats(true);
+    }
+    if(b.done){
+      var sc=Math.max(1,n.group.scale.x-dt*1.6);
+      n.group.scale.setScalar(sc);
+      if(sc<=1.001){n.group.scale.setScalar(1);n.birth=null}
+    }
+  });
+
+  hubs&&(Object.keys(hubs)).forEach(function(k){
+    var h=hubs[k];h.flash*=(1-dt*2.4);
+    h.halo.material.opacity=0.1+h.flash*0.5;
+    h.mesh.rotation.y+=dt*0.25;
+    /* 标签随距离淡入淡出：贴近组织时自动隐去，不遮挡 */
+    var dl=camera.position.distanceTo(h.pos);
+    h.label.material.opacity=clamp((dl-16)/26,0,0.82);
+    var ls=(TOPICS.length>6?5.2:2.2)*(0.75+clamp(dl/140,0,0.5));
+    h.label.scale.set(ls,ls/3.4,1);
+  });
+
+  synapses.forEach(function(s){
+    s.boost*=(1-dt*0.02);
+    s.flashA*=(1-dt*3.2);
+    if(s.dep<1)s.dep=Math.min(1,s.dep+dt*0.16);
+    s.mat.opacity=clamp(s.base+s.boost*0.42+s.flashA*0.28,0,0.7);
+    if(s.discA){
+      s.discA.material.opacity=clamp(0.2+s.flashA*0.8,0,1);
+      s.discB.material.opacity=clamp(0.14+s.flashA*0.55,0,0.9);
+    }
+  });
+
+  /* 动作电位传导 */
+  for(var i=spikes.length-1;i>=0;i--){
+    var sp=spikes[i];
+    if(sp.delay>0){
+      sp.delay-=dt;
+      sp.head.material.opacity=0;sp.tail.material.opacity=0;
+      continue;
+    }
+    sp.t+=dt*sp.speed;
+    var tt=Math.min(1,sp.t), tt2=Math.max(0,sp.t-0.07);
+    var p=pointAt(sp.pts,tt), p2=pointAt(sp.pts,tt2);
+    sp.head.position.copy(p);sp.tail.position.copy(p2);
+    sp.head.material.opacity=0.95*(1-Math.max(0,sp.t-1)*3);
+    sp.tail.material.opacity=0.4*(1-Math.max(0,sp.t-1)*3);
+    if(sp.t>=1){
+      sp.head.material.dispose();sp.tail.material.dispose();
+      scene.remove(sp.head);scene.remove(sp.tail);
+      var tgt=sp.syn.nB&&sp.syn.nB!==sp.from?sp.syn.nB:(sp.syn.nA!==sp.from?sp.syn.nA:null);
+      var inhib=sp.from.m.status==="retracted";
+      if(tgt){
+        releaseVesicles(sp.pts[sp.pts.length-1],tgt,inhib);
+        if(sp.syn.spineIdx>=0&&tgt.spines){
+          tgt.spines.flash[sp.syn.spineIdx]=1;
+          tgt.spines.geo.attributes.aFlash.needsUpdate=true;
+        }
+        sp.syn.flashA=1;
+        /* 一次突触到达 = 一次递质释放：权重受强度、LTP、疲劳共同调制；
+           单个 EPSP 不足以单独点燃下游（需要空间/时间总和） */
+        var dep=sp.syn.dep==null?1:sp.syn.dep;
+        var w=0.26*(0.55+sp.syn.strength*0.9)*(1+sp.syn.boost*0.5)*dep;
+        sp.syn.dep=Math.max(0.22,(sp.syn.dep==null?1:sp.syn.dep)*0.62);
+        applyPSP(tgt,w,inhib);
+      }
+      else{var hub=hubs[sp.from.m.topic];hub.flash=1}
+      spikes.splice(i,1);
+    }
+  }
+  /* 囊泡跨间隙 */
+  for(var vI=vesicles.length-1;vI>=0;vI--){
+    var ve=vesicles[vI];ve.life-=dt;
+    ve.s.position.addScaledVector(ve.v,dt);
+    ve.v.multiplyScalar(1-dt*1.8);
+    ve.s.material.opacity=clamp(ve.life*2,0,0.85);
+    if(ve.life<=0){
+      if(ve.target){/* PSP 已在突触到达时施加，囊泡只负责视觉 */}
+      ve.s.material.dispose();scene.remove(ve.s);vesicles.splice(vI,1);
+    }
+  }
+  /* 光环池 */
+  for(var rI=rings.length-1;rI>=0;rI--){
+    var r=rings[rI];r.t+=dt*1.6;
+    r.s.scale.setScalar(lerp(0.4,r.scale,r.t));
+    r.s.material.opacity=clamp(0.9*(1-r.t),0,0.9);
+    if(r.t>=1){r.s.material.dispose();scene.remove(r.s);rings.splice(rI,1)}
+  }
+  /* tooltip 膜电位实时 */
+  ttTimer-=dt;
+  if(hovered&&ttTimer<=0){
+    ttTimer=0.1;
+    var fill=document.getElementById("ttFill"),st=document.getElementById("ttState");
+    if(fill&&st){
+      var n2=hovered;
+      var pct=clamp(Math.max(0,n2.V)/1*100,0,100);
+      fill.style.width=pct+"%";
+      st.textContent=n2.refr>0?"不应期 · 刚发放过":(n2.V<0?"超极化（抑制中）":(n2.V>=1?"即将发放":"膜电位 "+Math.round(pct)+"%"+(n2.fat>0.3?" · 疲劳":"" )));
+    }
+  }
+  renderer.render(scene,camera);
+}
+function pointAt(pts,t){
+  var f=t*(pts.length-1), i=Math.floor(f), fr=f-i;
+  if(i>=pts.length-1)return pts[pts.length-1];
+  return pts[i].clone().lerp(pts[i+1],fr);
+}
+function spawnRing(pos,scale){
+  var s=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX_RING,color:0xffffff,transparent:true,opacity:0.9,blending:THREE.AdditiveBlending,depthWrite:false}));
+  s.position.copy(pos);s.scale.set(0.4,0.4,1);scene.add(s);
+  rings.push({s:s,t:0,scale:scale||2.2});
+}
+applyCamera();frame();
+
+window.addEventListener("resize",function(){
+  camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+/* 调试句柄（QA 用） */
+window.__vault={MEM:MEM,nodes:nodes,nodeList:nodeList,hubs:hubs,synapses:synapses,camTarget:camTarget,orbit:orbit,
+  stimulate:stimulate,inject:inject,fire:stimulate,search:runSearch,growMemories:growMemories,flyTo:flyTo,
+  assemble:el("assemble"),select:select,rankOf:rankOf,spiralPos:spiralPos,
+  state:function(id){var n=nodes[id];return {V:n.V,refr:n.refr,fat:n.fat,fire:n.fire,dimTarget:n.dimTarget}},
+  setMode:setMode, mode:function(){return mode},
+  vesicles:function(){return vesicles.length}, vesTotal:function(){return vesTotal}, spikes:function(){return spikes.length},
+  visCount:function(){return visCount},
+  dataMode:function(){return MODE},
+  textOf:function(id){return displayText(nodes[id].m)},
+  hits:function(){return currentHits.map(function(m){return m.id})},
+  setApprove:function(v){sensitiveApproved=!!v;el("approveSensitive").setAttribute("aria-pressed",String(!!v))}};
+})();
+</script>
+</body>
+</html>
